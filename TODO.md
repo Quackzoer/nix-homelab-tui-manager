@@ -48,15 +48,35 @@ Applies to all three: `homelab-tui`, the `hl` menu (client app) and plain CLI ou
 
 ## 5b. Extensible service menu (`hl` and `homelab-tui`)
 
-Design: [docs/menu-manifest.md](docs/menu-manifest.md). Goal: adding a service (Discord bot, Syncthing, GitHub runner, a container) means declaring it in `nix-cfg`, not changing or releasing the apps.
+Design: [docs/menu-manifest.md](docs/menu-manifest.md). Goal: adding a service (Discord bot, Syncthing, GitHub runner, a container) means adding one folder, not changing menu code.
 
-- [ ] Manifest schema v1 + parser/validator in `@homelab/core` (`menu.ts`): JSON with a `"homelab": "menu/v1"` marker, `defineService()` helper and `MENU` symbol for services bundled in TypeScript
-- [ ] NixOS module in `nix-cfg` (`homelab.services.<id>`) that writes `/etc/homelab/menu.d/<id>.json`; migrate Syncthing and Docker as the first entries
-- [ ] Standard actions derived from `kind` (systemd/docker): status, start, stop, restart, logs (follow), enable/disable; manifests list only extra actions (argv arrays, `sudo`, `danger`)
-- [ ] `hl` loads all manifests plus live state in a single ssh call; `homelab-tui` reads them locally; one bad manifest shows an error but never hides the others
-- [ ] Two-level menu: general items + every service with live state; selecting a service opens a submenu with its actions and "Back"
-- [ ] CLI mirror: `hl service <id> <action>`, with tab-completable ids
-- [ ] Unit tests: validation (unique ids, safe names, unknown fields), action to command mapping, submenu contents per kind
+Done:
+
+- [x] `@homelab/opentui-accordion`: `AccordionRenderable` with programmatic control (`accordion.set(1).open()`), events, keyboard, React binding, tests (kept free of homelab code so it can be proposed to OpenTUI)
+- [x] Two-tab, two-column menu in `hl` (General / Services): tabs on top, accordion of entries on the left, actions on the right; menu returns to the same place after an action
+- [x] `menuTabs()` in `@homelab/core` builds the tabs; services get the standard actions (status, logs, follow logs, restart)
+
+Next:
+
+- [ ] Builder API: `defineService({...}).action(...)` in `@homelab/core` producing a validated service definition (standard actions from `kind`, extras with argv commands, `sudo`, `danger`)
+- [ ] `features/services/<name>/` folders, each with a default export built by the builder, collected by one generated index so adding a folder adds the menu entry (see the design doc for the two options: bundled in the apps vs. JSON manifests written by NixOS)
+- [ ] Live state (running / stopped / failed) next to each service, fetched with one ssh call
+- [ ] `hl service <id> <action>` CLI mirror generated from the same definitions
+- [ ] Decide whether `nix-cfg` moves into this monorepo so a service's menu definition and its NixOS module live in one folder (see design doc)
+- [ ] Unit tests: validation (unique ids, safe names), action to command mapping, menu contents per service
+
+## 5d. First-run bootstrap from `homelab-tui` (one click)
+
+- [ ] On a fresh server, `homelab-tui` (installed by the NixOS config) shows an "Initialise" screen: download/clone the config and repo, run the first `nixos-rebuild`, install what is missing, report each step with progress
+- [ ] Idempotent steps with a visible checklist (done / skipped / failed) and a "retry failed step" action
+- [ ] Documented in `docs/bootstrap.md`: what runs, what needs a password, how to recover
+
+## 5e. Use OpenTUI for the dialogs around the menu
+
+- [ ] Confirmation dialog (bordered, in the same theme) instead of the plain `[y/N]` readline prompt
+- [ ] Result panel after an action (bordered: label, success/failure, plain-language explanation, "Enter: back to menu") instead of the plain "Press Enter" line
+- [ ] Login/connection progress as a bordered panel (reaching host, logging in, agent tip)
+- [ ] Streamed command output stays in the normal terminal; only the parts before and after it are OpenTUI screens
 
 ## 5c. Docs
 

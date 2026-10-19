@@ -9,6 +9,11 @@ Status: implemented
 - TypeScript 7 needs explicit `types` (`["bun", "node"]`) in each app tsconfig.
 - Shared code goes in `packages/core` and is consumed as TypeScript source. Do not duplicate command strings in the apps.
 
+## Tests
+
+- Pure logic (`packages/core`) is tested with `vp test`.
+- Anything that renders with OpenTUI (`packages/opentui-accordion`, `apps/client-app`) is tested with `bun test` and OpenTUI's test renderer (`@opentui/core/testing`, `@opentui/react/test-utils`): render, press keys with `mockInput`, assert on `captureCharFrame()`. These need Bun and OpenTUI's native core, so CI runs them on the Linux runner only.
+
 ## Scripts
 
 - Root scripts delegate to apps (`dev:client`, `dev:host`, `hl`). App scripts only do things for that app.

@@ -1,0 +1,5 @@
+{
+  "extends": "../../apps/client-app/tsconfig.json",
+  "compilerOptions": { "types": ["bun", "node"] },
+  "include": ["src", "tests"]
+}

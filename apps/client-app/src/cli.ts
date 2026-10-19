@@ -15,7 +15,7 @@ import {
   dockerRestartCommand,
   loadConfig,
   logsCommand,
-  menuItems,
+  menuTabs,
   rebootCommand,
   rebuildCommand,
   restartServiceCommand,
@@ -217,21 +217,24 @@ async function loadKeys(cfg: HomelabConfig): Promise<number> {
 
 /** The interactive menu. Actions return to it; q / Esc leaves. */
 async function menuLoop(cfg: HomelabConfig): Promise<void> {
-  const items = menuItems(cfg);
+  const tabs = menuTabs(cfg);
   const { pickMenuItem } = await import("./tui.tsx");
   // Connect before the first menu, so the passphrase is asked once and the actions run straight away.
   if (!(await connect(cfg.target))) {
     process.exitCode = 255;
     return;
   }
-  // The menu comes back after every action; q / Esc leaves it.
+  // The menu comes back after every action, on the same tab and entry; q quits.
+  let state: { tab: number; group: number } | undefined;
   for (;;) {
-    const id = await pickMenuItem({
+    const picked = await pickMenuItem({
       title: "homelab",
       subtitle: describeTarget(cfg.target),
-      items,
+      tabs,
+      initial: state,
     });
-    const item = items.find((i) => i.id === id);
+    state = picked.state;
+    const item = picked.item;
     if (!item) return;
     if (item.danger && !(await confirm(`${item.label} on ${describeTarget(cfg.target)}?`))) {
       continue;

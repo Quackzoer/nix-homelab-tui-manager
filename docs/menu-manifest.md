@@ -1,6 +1,6 @@
 # Service menu manifest
 
-Status: proposed (nothing below is implemented yet; tracked in `TODO.md` section 5b)
+Status: partly implemented. The menu UI and `menuTabs()` exist; the manifest/builder part below is still a proposal (`TODO.md` section 5b)
 
 ## Goal
 
@@ -108,3 +108,33 @@ Reject (and show a readable message naming the file) when: `homelab` marker or v
 1. Add `homelab.services.<id> = { ... };` in the service's module in `nix-cfg`.
 2. Push, run `hl deploy`.
 3. Open `hl`: the service is in the menu.
+
+## Revision: builder API and `features/services/`
+
+Idea: a small builder (factory) in `@homelab/core` so a service is defined in code, and one folder per service:
+
+```ts
+// features/services/syncthing/index.ts
+export default defineService("syncthing")
+  .label("Syncthing")
+  .systemd("syncthing.service")
+  .subtitle("web UI :8384")
+  .details(["File sync", "Data in /data/syncthing"])
+  .action("rescan", {
+    label: "Rescan folders",
+    command: ["syncthing", "cli", "operations", "rescan"],
+  })
+  .build();
+```
+
+`features/services/index.ts` collects the default export of every folder (generated, so adding a folder is enough) and `menuTabs()` renders them in the Services tab, with the standard actions derived from the kind.
+
+Two ways to ship the definitions, which is the open decision:
+
+|                               | Bundled in the apps                      | JSON written by NixOS (above)                     |
+| ----------------------------- | ---------------------------------------- | ------------------------------------------------- |
+| Add a service                 | New folder, merge to `main`, `hl update` | `homelab.services.<id>` in `nix-cfg`, `hl deploy` |
+| Typing and tests              | Full TypeScript, unit tests              | Parsed and validated at runtime                   |
+| Service and menu in one place | Only if `nix-cfg` is in the same repo    | Yes (same Nix module)                             |
+
+If `nix-cfg` moves into this monorepo, each `features/services/<name>/` folder can hold both `index.ts` (menu) and `module.nix` (the NixOS service), so one commit changes both and nothing can drift. The builder can then also emit the JSON manifest, which keeps the "no app release" path open.

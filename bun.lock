@@ -14,6 +14,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@homelab/core": "workspace:*",
+        "@homelab/opentui-accordion": "workspace:*",
         "@opentui/core": "catalog:",
         "@opentui/react": "catalog:",
         "commander": "catalog:",
@@ -22,6 +23,7 @@
       "devDependencies": {
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
+        "@types/react": "catalog:",
         "typescript": "catalog:",
       },
     },
@@ -57,6 +59,24 @@
         "vite-plus": "catalog:",
       },
     },
+    "packages/opentui-accordion": {
+      "name": "@homelab/opentui-accordion",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@opentui/core": "catalog:",
+        "@opentui/react": "catalog:",
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+        "@types/react": "catalog:",
+        "react": "catalog:",
+        "typescript": "catalog:",
+      },
+      "peerDependencies": {
+        "@opentui/core": "catalog:",
+        "@opentui/react": "catalog:",
+        "react": "catalog:",
+      },
+    },
   },
   "overrides": {
     "vite": "catalog:",
@@ -66,6 +86,7 @@
     "@opentui/react": "^0.6.6",
     "@types/bun": "1.3.14",
     "@types/node": "^24",
+    "@types/react": "^19.2.0",
     "commander": "^15.0.0",
     "react": "^19.2.8",
     "typescript": "^7.0.2",
@@ -82,6 +103,8 @@
     "@blazediff/core": ["@blazediff/core@1.10.0", "", {}, "sha512-AOQff0zgR7cGsZL+4E7hVkmujoPUpm0J9xzWGWZj5wCjd3gmxESXAPfKyuzs93VdpQNFhHlBhfOjrcZ+XTERtQ=="],
 
     "@homelab/core": ["@homelab/core@workspace:packages/core"],
+
+    "@homelab/opentui-accordion": ["@homelab/opentui-accordion@workspace:packages/opentui-accordion"],
 
     "@jridgewell/resolve-uri": ["@jridgewell/resolve-uri@3.1.2", "", {}, "sha512-bRISgCIjP20/tbWSPWMEi54QVPRZExkuD9lJL+UIxUKtwVJA8wW1Trb1jMs1RFXo1CBTNZ/5hpC9QvmKWdopKw=="],
 
@@ -221,6 +244,8 @@
 
     "@types/node": ["@types/node@24.19.2", "", { "dependencies": { "undici-types": ">=7.24.0 <7.24.7" } }, "sha512-93d49wCWJkCyN87MxLpNN6KXPCwFw7bVUg79mGUV1OS40JGWwVCr8n61DXCSqz7CV6/VfPkb7xec7uP2M+QHWQ=="],
 
+    "@types/react": ["@types/react@19.3.0", "", { "dependencies": { "csstype": "^3.2.2" } }, "sha512-N0rFCuH9YoxG9/m61l9MfpJKfmLOVU0em7ipIz6TRgSSkvReLB9vL85GB+yr8Bs5leqpvg96JSwF4ZS1s4viQg=="],
+
     "@typescript/typescript-aix-ppc64": ["@typescript/typescript-aix-ppc64@7.0.2", "", { "os": "aix", "cpu": "ppc64" }, "sha512-MTKKkWB7p/0E9xi1d1tHtZ5PiLkGEMIq88pK2CubZjOsLtYTLqhgIgi6zepFa+9GHZ6h05NMCkQxGKiPXMxXtQ=="],
 
     "@typescript/typescript-darwin-arm64": ["@typescript/typescript-darwin-arm64@7.0.2", "", { "os": "darwin", "cpu": "arm64" }, "sha512-gowzar9MwS/aRWp6f3a4KUqzRjAZjOsmGNCM6LcTgXum+dBfgsBVMN+AgvOCCbguXyick6LJhpBszxMebJ8syA=="],
@@ -338,6 +363,8 @@
     "commander": ["commander@15.0.0", "", {}, "sha512-z67u4ZhzCL/Tydu1lJARtEZYWbWaN7oYLHbsuzocr6y4N6WZAagG3RQ4FW61V1/0+jImpj293XfrcYnd1qxtPg=="],
 
     "convert-source-map": ["convert-source-map@2.0.0", "", {}, "sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg=="],
+
+    "csstype": ["csstype@3.2.3", "", {}, "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ=="],
 
     "dequal": ["dequal@2.0.3", "", {}, "sha512-0je+qPKHEMohvfRTCEo3CrPG6cAzAYgmzKyxRiYSSDkS6eGJdyVJm7WaYA5ECaAD9wLB2T4EEeymA5aFVcYXCA=="],
 

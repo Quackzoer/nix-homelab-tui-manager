@@ -4,12 +4,13 @@ Status: implemented
 
 ## Pieces
 
-| Path              | Runs on         | What                                                                                    |
-| ----------------- | --------------- | --------------------------------------------------------------------------------------- |
-| `apps/client-app` | desktop         | `hl`: commander CLI plus an OpenTUI menu. Talks to the homelab through the system `ssh` |
-| `apps/host-app`   | homelab (NixOS) | `homelab-tui`: OpenTUI app installed at `~/.local/bin/homelab-tui`                      |
-| `packages/core`   | both            | `@homelab/core`: config, ssh helpers, remote command builders, shared types             |
-| `apps/website`    | n/a             | Vite starter, kept only as a monorepo reference                                         |
+| Path                         | Runs on         | What                                                                                                     |
+| ---------------------------- | --------------- | -------------------------------------------------------------------------------------------------------- |
+| `apps/client-app`            | desktop         | `hl`: commander CLI plus an OpenTUI menu. Talks to the homelab through the system `ssh`                  |
+| `apps/host-app`              | homelab (NixOS) | `homelab-tui`: OpenTUI app installed at `~/.local/bin/homelab-tui`                                       |
+| `packages/core`              | both            | `@homelab/core`: config, ssh helpers, remote command builders, shared types                              |
+| `packages/opentui-accordion` | both            | `AccordionRenderable` + React binding for OpenTUI. No homelab code in it, so it can be proposed upstream |
+| `apps/website`               | n/a             | Vite starter, kept only as a monorepo reference                                                          |
 
 `nix-cfg` (separate repo, `Quackzoer/nix-cfg`) is the NixOS configuration of the server. It installs `homelab-tui` and is applied with `hl deploy`.
 
@@ -36,3 +37,9 @@ Status: implemented
 | New `homelab-tui` screen            | `apps/host-app`                                                | Merge to `main`, then `hl update` |
 | New system service or NixOS setting | `nix-cfg`                                                      | Push, then `hl deploy`            |
 | New service in the menu             | `nix-cfg` (manifest), see [menu-manifest.md](menu-manifest.md) | Push, then `hl deploy`            |
+
+## The interactive menu (`hl`)
+
+- Layout: tab bar on top (General, Services), two columns below: an accordion of entries on the left, the actions of the selected entry on the right. Built from `menuTabs()` in `@homelab/core`.
+- Keys: `Tab` switches pane, `[` `]` switch tab, arrows move, space expands, Enter/→ goes to the actions, Esc goes back, `q` quits. The menu returns to the same place after an action.
+- OpenTUI resets a list's selection whenever it gets a new `options` array, so pass memoised arrays.

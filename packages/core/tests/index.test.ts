@@ -7,7 +7,9 @@ import {
   parseIdentityFiles,
   logsCommand,
   menuItems,
+  menuTabs,
   rebuildCommand,
+  serviceItems,
   shellQuote,
   sshArgs,
   updateCommand,
@@ -117,5 +119,26 @@ describe("commands", () => {
   });
   test("menu has a shell entry without a command", () => {
     expect(menuItems(cfg).find((i) => i.id === "shell")?.command).toBeUndefined();
+  });
+});
+
+describe("menuTabs", () => {
+  const cfg = loadConfig({});
+  test("General and Services tabs; every action of menuItems is reachable", () => {
+    const tabs = menuTabs(cfg);
+    expect(tabs.map((t) => t.id)).toEqual(["general", "services"]);
+    const general = tabs[0]!.groups.flatMap((g) => g.items.map((i) => i.id)).sort();
+    expect(general).toEqual(
+      menuItems(cfg)
+        .map((i) => i.id)
+        .sort(),
+    );
+  });
+  test("services get standard actions; restart needs sudo and a terminal", () => {
+    const items = serviceItems({ id: "x", label: "X", unit: "x.service" });
+    expect(items.map((i) => i.id)).toEqual(["x:status", "x:logs", "x:follow", "x:restart"]);
+    const restart = items.at(-1)!;
+    expect(restart.sudo && restart.tty && restart.danger).toBe(true);
+    expect(() => serviceItems({ id: "x", label: "X", unit: "x; reboot" })).toThrow();
   });
 });
