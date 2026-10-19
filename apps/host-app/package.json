@@ -7,16 +7,18 @@
   "scripts": {
     "dev": "bun run --watch src/index.tsx",
     "start": "bun run src/index.tsx",
-    "build": "bun build --compile src/index.tsx --outfile dist/host-app",
+    "build": "bun build --compile src/index.tsx --outfile dist/homelab-tui",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@homelab/core": "workspace:*",
     "@opentui/core": "catalog:",
     "@opentui/react": "catalog:",
     "react": "catalog:"
   },
   "devDependencies": {
     "@types/bun": "catalog:",
+    "@types/node": "catalog:",
     "typescript": "catalog:"
   },
   "engines": {

@@ -11,6 +11,7 @@ export default defineConfig({
     options: { typeAware: true, typeCheck: true },
   },
   run: {
-    cache: true,
+    // Cache build/test tasks, but never package.json scripts: `vp run hl ...` must always actually run.
+    cache: { scripts: false, tasks: true },
   },
 });

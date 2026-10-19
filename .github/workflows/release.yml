@@ -1,0 +1,65 @@
+# Builds both apps on Linux and Windows and publishes them as GitHub release assets
+# when a version tag is pushed:  git tag v0.1.0 && git push origin v0.1.0
+#
+# OpenTUI has a native core, so each platform is built on its own runner (no cross-compiling).
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux-x64
+            ext: ""
+          - os: windows-latest
+            platform: windows-x64
+            ext: ".exe"
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+      - run: bun install --frozen-lockfile
+      - name: Build apps
+        run: |
+          bun run --cwd apps/host-app build
+          bun run --cwd apps/client-app build
+      - name: Collect assets
+        run: |
+          mkdir -p release
+          cp "apps/host-app/dist/homelab-tui${{ matrix.ext }}" "release/homelab-tui-${{ matrix.platform }}${{ matrix.ext }}"
+          cp "apps/client-app/dist/hl${{ matrix.ext }}" "release/hl-${{ matrix.platform }}${{ matrix.ext }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform }}
+          path: release/*
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          pattern: release-*
+          merge-multiple: true
+      - name: Checksums
+        working-directory: release
+        run: sha256sum * > SHA256SUMS
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true

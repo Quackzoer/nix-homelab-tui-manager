@@ -1,23 +1,11 @@
-# react
+# host-app (`homelab-tui`)
 
-Requires [Bun](https://bun.sh/) 1.3.0 or later.
-
-To install dependencies:
+The TUI that runs on the homelab itself. Reach it from the desktop with `hl tui`.
 
 ```bash
-bun install
+bun run start    # run
+bun run build    # compile to dist/homelab-tui (build on the target OS: OpenTUI has a native core)
 ```
 
-To run:
-
-```bash
-bun dev
-```
-
-To typecheck:
-
-```bash
-bun run typecheck
-```
-
-This project was created using `bun create tui`. [create-tui](https://github.com/msmps/create-tui) is the easiest way to get started with OpenTUI.
+Must be built on Linux and installed at `~/.local/bin/homelab-tui` on the homelab before `hl tui` works.
+See the root README ("`hl tui` needs `host-app` installed on the homelab").

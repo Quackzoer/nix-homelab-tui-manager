@@ -1,29 +1,48 @@
-# Vite+ Monorepo Starter
+# nix-homelab-tui-manager
 
-A starter for creating a Vite+ monorepo.
+Bun + Vite+ monorepo for managing the homelab (NixOS on the Dell Wyse, config in `nix-cfg`).
+
+| Path              | What                                                                                            |
+| ----------------- | ----------------------------------------------------------------------------------------------- |
+| `apps/client-app` | `hl` — CLI + TUI launcher that runs on the desktop and talks to the homelab over ssh            |
+| `apps/host-app`   | `homelab-tui` — the TUI that runs on the homelab (open it from the desktop with `hl tui`)       |
+| `packages/core`   | `@homelab/core` — shared config, ssh helpers and remote actions (consumed as TypeScript source) |
+| `apps/website`    | Vite starter site                                                                               |
 
 ## Development
 
-- Check everything is ready:
-
 ```bash
-vp run ready
+bun install
+vp run ready         # check + test + build everything
+vp run dev:client    # run hl
+vp run dev:host      # run homelab-tui
+vp run dev           # website
 ```
 
-- Run the tests:
+See `apps/client-app/README.md` for the `hl` commands and `HL_*` settings.
+
+## Running `hl`
 
 ```bash
-vp run -r test
+bun run hl                 # interactive menu
+bun run hl status          # status, logs <unit>, docker ps, rebuild, reboot, ...
 ```
 
-- Build the monorepo:
+`hl` talks to the homelab with your system `ssh` (default `krzysztof@wyse`; override with `-H <host>` or `HL_HOST`).
+
+## `hl tui` needs `host-app` installed on the homelab
+
+`hl tui` runs `~/.local/bin/homelab-tui` on the homelab, so that binary has to be built **for Linux** and
+copied there first. A Windows build (`vp run -r build` on your PC) produces `.exe` files that will not run
+on the NixOS box, and OpenTUI has a native core, so build on Linux (WSL works):
 
 ```bash
-vp run -r build
+# in WSL / on a Linux machine
+bun install
+cd apps/host-app && bun run build            # -> dist/homelab-tui
+ssh krzysztof@wyse 'mkdir -p ~/.local/bin'
+scp dist/homelab-tui krzysztof@wyse:~/.local/bin/homelab-tui
 ```
 
-- Run the development server:
-
-```bash
-vp run dev
-```
+The NixOS config also needs `programs.nix-ld.enable = true;`, otherwise compiled Bun binaries cannot start.
+Once releases are published from CI, `HL_REPO=owner/name hl update` replaces the manual copy.

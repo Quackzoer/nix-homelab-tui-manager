@@ -1,0 +1,285 @@
+import { Command } from "commander";
+import { createInterface } from "node:readline/promises";
+import {
+  type HomelabConfig,
+  type Target,
+  describeTarget,
+  deployCommand,
+  dockerLogsCommand,
+  dockerPsCommand,
+  dockerRestartCommand,
+  loadConfig,
+  logsCommand,
+  menuItems,
+  rebootCommand,
+  rebuildCommand,
+  restartServiceCommand,
+  probeTarget,
+  runRemote,
+  statusCommand,
+  updateCommand,
+} from "@homelab/core";
+import pkg from "../package.json" with { type: "json" };
+import { pushState } from "./git.ts";
+import { note, startSpinner } from "./ui.ts";
+
+interface GlobalOptions {
+  host?: string;
+  user?: string;
+  port?: string;
+}
+
+interface RemoteCall {
+  /** Omitted means an interactive login shell. */
+  command?: string;
+  tty?: boolean;
+  /** Runs sudo on the homelab (needs tty for the password prompt). */
+  sudo?: boolean;
+}
+
+function configFrom(cmd: Command): HomelabConfig {
+  const opts = cmd.optsWithGlobals<GlobalOptions>();
+  const cfg = loadConfig();
+  if (opts.host) cfg.target.host = opts.host;
+  if (opts.user) cfg.target.user = opts.user;
+  if (opts.port) cfg.target.port = Number.parseInt(opts.port, 10);
+  return cfg;
+}
+
+async function confirm(question: string): Promise<boolean> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    return /^y(es)?$/i.test((await rl.question(`${question} [y/N] `)).trim());
+  } finally {
+    rl.close();
+  }
+}
+
+/** Checks the host answers (with a spinner), runs the call over ssh and reports how it went. Returns ssh's exit code. */
+async function execute(target: Target, call: RemoteCall, label: string): Promise<number> {
+  const where = describeTarget(target);
+  const spinner = startSpinner(`Reaching ${where}…`);
+  const probe = await probeTarget(target);
+  if (!probe.ok) {
+    spinner.fail(`Cannot reach ${where} (${probe.host}:${probe.port}): ${probe.reason}`);
+    note(
+      "  Is the homelab on and reachable from here? Use -H <host> or set HL_HOST to point elsewhere.",
+    );
+    return 255;
+  }
+  spinner.succeed(
+    probe.skipped
+      ? `Connecting to ${where}`
+      : `${where} is reachable (${probe.host}:${probe.port})`,
+  );
+  note(
+    `→ ${label} (${
+      call.sudo
+        ? "you may be asked for your ssh key passphrase, then for the sudo password on the homelab"
+        : "ssh may ask for your key passphrase"
+    })`,
+  );
+
+  const code = await runRemote(target, call.command, { tty: call.tty });
+  if (code !== 0) {
+    note(
+      code === 255
+        ? "✖ ssh could not connect or authenticate (exit code 255)"
+        : `✖ Command failed with exit code ${code}`,
+    );
+  } else if (call.command !== undefined && !(call.tty && !call.sudo)) {
+    note("✔ Done");
+  }
+  return code;
+}
+
+/** Builds the remote call from the resolved config and runs it. */
+async function go(
+  cmd: Command,
+  build: (cfg: HomelabConfig) => RemoteCall | undefined,
+): Promise<void> {
+  const cfg = configFrom(cmd);
+  const call = build(cfg);
+  if (!call) return;
+  const path = [cmd.parent?.parent ? cmd.parent.name() : undefined, cmd.name()]
+    .filter(Boolean)
+    .join(" ");
+  process.exitCode = await execute(cfg.target, call, `Running hl ${path}`);
+}
+
+function positiveInt(value: string): number {
+  const n = Number.parseInt(value, 10);
+  if (!Number.isInteger(n) || n <= 0) throw new Error(`Expected a positive number, got "${value}"`);
+  return n;
+}
+
+export async function run(argv: string[]): Promise<void> {
+  const program = new Command()
+    .name("hl")
+    .description("Manage the homelab over ssh. Run without a command for an interactive menu.")
+    .version(pkg.version)
+    .option("-H, --host <host>", "ssh host or alias (env HL_HOST, default wyse)")
+    .option("-u, --user <user>", "ssh user (env HL_USER, default krzysztof)")
+    .option("-p, --port <port>", "ssh port (env HL_PORT)")
+    .enablePositionalOptions();
+
+  program.action(async (_opts, cmd: Command) => {
+    if (!process.stdin.isTTY || !process.stdout.isTTY) {
+      program.outputHelp();
+      return;
+    }
+    const cfg = configFrom(cmd);
+    const items = menuItems(cfg);
+    const { pickMenuItem } = await import("./tui.tsx");
+    const id = await pickMenuItem({
+      title: "homelab",
+      subtitle: describeTarget(cfg.target),
+      items,
+    });
+    const item = items.find((i) => i.id === id);
+    if (!item) return;
+    if (item.danger && !(await confirm(`${item.label} on ${describeTarget(cfg.target)}?`))) return;
+    process.exitCode = await execute(
+      cfg.target,
+      { command: item.command, tty: item.tty, sudo: item.sudo },
+      item.label,
+    );
+  });
+
+  program
+    .command("tui")
+    .description("Open homelab-tui on the homelab, rendered in this terminal")
+    .action((_o, cmd: Command) => go(cmd, (cfg) => ({ command: cfg.remoteBin, tty: true })));
+
+  program
+    .command("ssh")
+    .description("Open a shell on the homelab, or run a command")
+    .argument("[command...]", "command to run instead of a login shell")
+    .passThroughOptions()
+    .action((words: string[], _o, cmd: Command) =>
+      go(cmd, () => (words.length > 0 ? { command: words.join(" ") } : {})),
+    );
+
+  program
+    .command("status")
+    .description("Uptime, load, memory, disk, failed units and containers")
+    .action((_o, cmd: Command) => go(cmd, () => ({ command: statusCommand() })));
+
+  program
+    .command("restart")
+    .description("Restart a systemd service")
+    .argument("<service>")
+    .action((service: string, _o, cmd: Command) =>
+      go(cmd, () => ({ command: restartServiceCommand(service), tty: true, sudo: true })),
+    );
+
+  program
+    .command("logs")
+    .description("Show journal logs for a systemd unit")
+    .argument("<unit>")
+    .option("-f, --follow", "follow new output")
+    .option("-n, --lines <n>", "number of lines", positiveInt, 100)
+    .action((unit: string, opts: { follow?: boolean; lines: number }, cmd: Command) =>
+      go(cmd, () => ({
+        command: logsCommand(unit, { follow: opts.follow, lines: opts.lines }),
+        tty: opts.follow,
+      })),
+    );
+
+  const docker = program.command("docker").description("Manage containers on the homelab");
+  docker
+    .command("ps")
+    .description("List containers")
+    .action((_o, cmd: Command) => go(cmd, () => ({ command: dockerPsCommand() })));
+  docker
+    .command("restart")
+    .description("Restart a container")
+    .argument("<name>")
+    .action((name: string, _o, cmd: Command) =>
+      go(cmd, () => ({ command: dockerRestartCommand(name) })),
+    );
+  docker
+    .command("logs")
+    .description("Show container logs")
+    .argument("<name>")
+    .option("-f, --follow", "follow new output")
+    .option("-n, --lines <n>", "number of lines", positiveInt, 100)
+    .action((name: string, opts: { follow?: boolean; lines: number }, cmd: Command) =>
+      go(cmd, () => ({
+        command: dockerLogsCommand(name, { follow: opts.follow, lines: opts.lines }),
+        tty: opts.follow,
+      })),
+    );
+
+  program
+    .command("rebuild")
+    .description("Pull the config checkout on the homelab (~/nix-config) and switch to it")
+    .action((_o, cmd: Command) =>
+      go(cmd, (cfg) => ({ command: rebuildCommand(cfg), tty: true, sudo: true })),
+    );
+
+  program
+    .command("deploy")
+    .description("Apply the latest NixOS config from GitHub on the homelab (push first)")
+    .option("-f, --force", "deploy even if local commits are not pushed yet")
+    .action(async (opts: { force?: boolean }, cmd: Command) => {
+      const cfg = configFrom(cmd);
+      if (cfg.configDir && !opts.force) {
+        const spinner = startSpinner(`Checking that ${cfg.configDir} is pushed to GitHub…`);
+        const state = await pushState(cfg.configDir);
+        if (state.error) {
+          spinner.fail(state.error);
+          note("  Fix that, or use --force to skip the check.");
+          process.exitCode = 1;
+          return;
+        }
+        if (state.ahead > 0) {
+          spinner.fail(
+            `${state.ahead} commit(s) in ${cfg.configDir} are not pushed to GitHub yet. Run git push first, or use --force.`,
+          );
+          process.exitCode = 1;
+          return;
+        }
+        spinner.succeed(
+          state.dirty
+            ? "Everything committed is pushed (uncommitted changes will not be deployed)"
+            : "Config repo is pushed",
+        );
+      } else if (!cfg.configDir) {
+        note(
+          "Tip: set HL_CONFIG_DIR to your local nix-cfg checkout so hl can check it is pushed first.",
+        );
+      }
+      process.exitCode = await execute(
+        cfg.target,
+        { command: deployCommand(cfg), tty: true, sudo: true },
+        `Deploying github:${cfg.configRepo}#${cfg.flakeHost}`,
+      );
+    });
+
+  program
+    .command("reboot")
+    .description("Reboot the homelab")
+    .option("-y, --yes", "skip the confirmation prompt")
+    .action(async (opts: { yes?: boolean }, cmd: Command) => {
+      const cfg = configFrom(cmd);
+      if (!opts.yes && !(await confirm(`Reboot ${describeTarget(cfg.target)}?`))) return;
+      process.exitCode = await execute(
+        cfg.target,
+        { command: rebootCommand(), tty: true, sudo: true },
+        "Rebooting",
+      );
+    });
+
+  program
+    .command("update")
+    .description("Install the latest homelab-tui release on the homelab (needs HL_REPO)")
+    .action((_o, cmd: Command) => go(cmd, (cfg) => ({ command: updateCommand(cfg) })));
+
+  try {
+    await program.parseAsync(argv);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  }
+}
