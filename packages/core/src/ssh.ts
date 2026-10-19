@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { connect } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -127,6 +128,28 @@ export function isAuthenticated(target: Target): Promise<boolean> {
  */
 export function authenticate(target: Target): Promise<number> {
   return runRemote(target, "true");
+}
+
+/** Reads the key files ssh would try for a host out of `ssh -G` output (`~` expanded). */
+export function parseIdentityFiles(config: string, home: string = homedir()): string[] {
+  const files = [...config.matchAll(/^identityfile (.+)$/gm)].map((m) =>
+    m[1]!.trim().replace(/^~(?=[\\/]|$)/, home),
+  );
+  return [...new Set(files)];
+}
+
+/** Loads the host's key files that exist into ssh-agent. `ssh-add` asks for each passphrase once. */
+export async function addKeysToAgent(target: Target): Promise<{ added: string[]; code: number }> {
+  const files = parseIdentityFiles(await sshConfigFor(target)).filter((file) => existsSync(file));
+  if (files.length === 0) return { added: [], code: 1 };
+  const code = await new Promise<number>((resolve, reject) => {
+    const child = spawn("ssh-add", files, { stdio: "inherit" });
+    child.on("error", (error: NodeJS.ErrnoException) =>
+      reject(error.code === "ENOENT" ? new Error("`ssh-add` was not found on PATH") : error),
+    );
+    child.on("close", (exit) => resolve(exit ?? 1));
+  });
+  return { added: files, code };
 }
 
 export interface ProbeResult {

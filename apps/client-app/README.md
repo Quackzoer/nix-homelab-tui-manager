@@ -9,12 +9,18 @@ bun run start -- status       # any command: status / logs / docker ps / rebuild
 bun run build                 # compile to dist/hl
 ```
 
-## Logging in
+## Logging in (one-time setup)
 
-`hl` logs in once, before the first action (or before the menu opens): ssh asks for your key passphrase
-there, and every later action runs without asking again. On Linux/macOS the connection is shared; on
-Windows the key is kept in ssh-agent, so the **OpenSSH Authentication Agent** service must be running
-(admin PowerShell: `Set-Service ssh-agent -StartupType Manual; Start-Service ssh-agent`). `hl` prints this hint when it is not.
+`hl` logs in once per run, before the first action or the menu: ssh asks for your key passphrase there,
+and later actions run without asking again. Linux/macOS share one connection. **Windows ssh cannot share
+a connection, so it needs ssh-agent to remember the key**; set it up once:
+
+```bash
+bun run hl init     # starts the ssh-agent service (Windows shows an administrator prompt: accept it) and loads your key
+```
+
+You type the key passphrase once; Windows keeps the key across reboots. `hl login` repeats only the key step.
+
 The sudo password on the homelab is a separate prompt and is always asked.
 
 In the interactive menu, an action returns to the menu when it finishes (press Enter); `q` or Esc leaves.

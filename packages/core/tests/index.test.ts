@@ -4,6 +4,7 @@ import {
   deployCommand,
   dockerRestartCommand,
   loadConfig,
+  parseIdentityFiles,
   logsCommand,
   menuItems,
   rebuildCommand,
@@ -65,6 +66,17 @@ describe("agentStatusFromExit", () => {
     expect(agentStatusFromExit(1)).toBe("empty");
     expect(agentStatusFromExit(2)).toBe("missing");
     expect(agentStatusFromExit(null)).toBe("missing");
+  });
+});
+
+describe("parseIdentityFiles", () => {
+  test("expands ~ and drops duplicates", () => {
+    const out =
+      "hostname wyse\nidentityfile ~/.ssh/id_ed25519\nidentityfile ~/.ssh/id_rsa\nidentityfile ~/.ssh/id_ed25519\n";
+    expect(parseIdentityFiles(out, "/home/me")).toEqual([
+      "/home/me/.ssh/id_ed25519",
+      "/home/me/.ssh/id_rsa",
+    ]);
   });
 });
 
