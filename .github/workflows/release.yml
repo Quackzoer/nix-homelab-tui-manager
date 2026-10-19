@@ -1,15 +1,27 @@
-# Builds both apps on Linux and Windows and publishes them as GitHub release assets
-# when a version tag is pushed:  git tag v0.1.0 && git push origin v0.1.0
+# Builds both apps on Linux and Windows and publishes them as a GitHub release on every push to main.
+# Work on the `dev` branch (no workflow runs); merging into main publishes a new release.
 #
+# Each release is tagged v<MAJOR_MINOR>.<run number>, e.g. v0.1.7. Bump MAJOR_MINOR by hand for bigger releases.
 # OpenTUI has a native core, so each platform is built on its own runner (no cross-compiling).
 name: release
 
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "TODO.md"
+  workflow_dispatch:
+
+env:
+  MAJOR_MINOR: "0.1"
 
 permissions:
   contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -33,6 +45,12 @@ jobs:
         with:
           bun-version: 1.4.3
       - run: bun install --frozen-lockfile
+      - name: Typecheck and test
+        run: |
+          bun run --cwd packages/core typecheck
+          bun run --cwd packages/core test
+          bun run --cwd apps/host-app typecheck
+          bun run --cwd apps/client-app typecheck
       - name: Build apps
         run: |
           bun run --cwd apps/host-app build
@@ -61,5 +79,9 @@ jobs:
         run: sha256sum * > SHA256SUMS
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ env.MAJOR_MINOR }}.${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          name: v${{ env.MAJOR_MINOR }}.${{ github.run_number }}
+          make_latest: true
           files: release/*
           generate_release_notes: true

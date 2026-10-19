@@ -64,7 +64,7 @@
 ## 8. Code and repo health
 
 - [ ] Tests for the CLI (stub `ssh` on PATH and assert the commands) and a TUI smoke test; core already has unit tests
-- [ ] Stamp the version from the git tag into the builds (`bun build --define`); both apps report `0.0.0` today
+- [ ] Stamp the release version (`v0.1.<run number>`) into the builds (`bun build --define`); both apps report `0.0.0` today
 - [ ] Shared `packages/ui` with OpenTUI components and theme used by both apps (keep `@homelab/core` free of React)
 - [ ] Delete the stale `apps/client-app/bun.lock` and `apps/host-app/bun.lock`
 - [ ] Remove or repurpose `apps/website` (Vite starter) and fix the root `dev` script that points at it
@@ -84,7 +84,8 @@
 
 ## Release and deployment
 
-- [x] GitHub Actions workflow publishing `homelab-tui` and `hl` for Linux and Windows on `v*` tags (`.github/workflows/release.yml`)
+- [x] GitHub Actions workflow publishing `homelab-tui` and `hl` for Linux and Windows on every push to `main` (tag `v0.1.<run number>`; work on `dev` to avoid releases) (`.github/workflows/release.yml`)
 - [x] NixOS module installing `homelab-tui` from the latest release on boot (`nix-cfg/modules/homelab-tui.nix`)
-- [ ] Create the GitHub repo, set `origin`, push, and tag `v0.1.0` (the module's repo name assumes `Quackzoer/nix-homelab-tui-manager`)
+- [ ] Create the GitHub repo, set `origin`, rename the branch to `main` and push (the module's repo name assumes `Quackzoer/nix-homelab-tui-manager`)
+- [ ] Delete old releases automatically (keep the newest ~10), since every push to `main` creates one
 - [ ] Add a "build + typecheck + test" workflow on pull requests
