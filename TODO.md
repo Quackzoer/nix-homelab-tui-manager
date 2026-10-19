@@ -3,7 +3,7 @@
 ## 1. Clearer errors and more information
 
 - [ ] Map common failures to plain-language messages with a next step, instead of exit codes:
-  - 127 on `hl tui` → "homelab-tui is not installed on the homelab" + how to install it (`hl update`)
+  - [x] 127 on `hl tui` → "homelab-tui is not installed on the homelab" + how to install it (`hl update`)
   - `Permission denied (publickey)` → key not authorised / ssh-agent not running
   - host key changed / unknown host
   - timeout / `ECONNREFUSED` (already handled by the reachability check; add the "is ssh enabled in NixOS?" hint)

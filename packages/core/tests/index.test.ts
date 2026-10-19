@@ -79,11 +79,16 @@ describe("commands", () => {
   test("sudo menu items ask for a tty", () => {
     for (const item of menuItems(cfg).filter((i) => i.sudo)) expect(item.tty).toBe(true);
   });
-  test("update needs a repo", () => {
+  test("update downloads the latest release asset", () => {
     expect(updateCommand(cfg)).toContain(
       "https://github.com/me/repo/releases/latest/download/homelab-tui-linux-x64",
     );
-    expect(() => updateCommand(loadConfig({}))).toThrow();
+    expect(updateCommand(loadConfig({}))).toContain(
+      "github.com/Quackzoer/nix-homelab-tui-manager/releases",
+    );
+  });
+  test("tui menu item explains a missing binary", () => {
+    expect(menuItems(cfg).find((i) => i.id === "tui")?.explain?.[127]).toContain("hl update");
   });
   test("menu has a shell entry without a command", () => {
     expect(menuItems(cfg).find((i) => i.id === "shell")?.command).toBeUndefined();

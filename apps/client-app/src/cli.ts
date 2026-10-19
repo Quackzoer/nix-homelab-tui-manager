@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import { createInterface } from "node:readline/promises";
 import {
+  NOT_INSTALLED,
   type HomelabConfig,
   type Target,
   describeTarget,
@@ -35,6 +36,8 @@ interface RemoteCall {
   tty?: boolean;
   /** Runs sudo on the homelab (needs tty for the password prompt). */
   sudo?: boolean;
+  /** Plain-language explanations for specific exit codes. */
+  explain?: Record<number, string>;
 }
 
 function configFrom(cmd: Command): HomelabConfig {
@@ -82,10 +85,13 @@ async function execute(target: Target, call: RemoteCall, label: string): Promise
 
   const code = await runRemote(target, call.command, { tty: call.tty });
   if (code !== 0) {
+    const explained = call.explain?.[code];
     note(
-      code === 255
-        ? "✖ ssh could not connect or authenticate (exit code 255)"
-        : `✖ Command failed with exit code ${code}`,
+      explained
+        ? `✖ ${explained}`
+        : code === 255
+          ? "✖ ssh could not connect or authenticate (exit code 255)"
+          : `✖ Command failed with exit code ${code}`,
     );
   } else if (call.command !== undefined && !(call.tty && !call.sudo)) {
     note("✔ Done");
@@ -141,7 +147,7 @@ export async function run(argv: string[]): Promise<void> {
     if (item.danger && !(await confirm(`${item.label} on ${describeTarget(cfg.target)}?`))) return;
     process.exitCode = await execute(
       cfg.target,
-      { command: item.command, tty: item.tty, sudo: item.sudo },
+      { command: item.command, tty: item.tty, sudo: item.sudo, explain: item.explain },
       item.label,
     );
   });
@@ -149,7 +155,9 @@ export async function run(argv: string[]): Promise<void> {
   program
     .command("tui")
     .description("Open homelab-tui on the homelab, rendered in this terminal")
-    .action((_o, cmd: Command) => go(cmd, (cfg) => ({ command: cfg.remoteBin, tty: true })));
+    .action((_o, cmd: Command) =>
+      go(cmd, (cfg) => ({ command: cfg.remoteBin, tty: true, explain: { 127: NOT_INSTALLED } })),
+    );
 
   program
     .command("ssh")
@@ -273,7 +281,7 @@ export async function run(argv: string[]): Promise<void> {
 
   program
     .command("update")
-    .description("Install the latest homelab-tui release on the homelab (needs HL_REPO)")
+    .description("Install the latest homelab-tui release on the homelab")
     .action((_o, cmd: Command) => go(cmd, (cfg) => ({ command: updateCommand(cfg) })));
 
   try {

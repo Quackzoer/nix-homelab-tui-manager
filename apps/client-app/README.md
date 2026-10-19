@@ -11,7 +11,7 @@ bun run build                 # compile to dist/hl
 
 Settings come from env vars (all optional): `HL_HOST` (wyse), `HL_USER` (krzysztof), `HL_PORT`,
 `HL_NIX_DIR` (~/nix-config), `HL_FLAKE_HOST` (wyse), `HL_REMOTE_BIN` (~/.local/bin/homelab-tui),
-`HL_REPO` (owner/name, needed by `hl update`),
+`HL_REPO` (owner/name of the release repo, default Quackzoer/nix-homelab-tui-manager),
 `HL_CONFIG_REPO` (owner/name of the NixOS config, default Quackzoer/nix-cfg), `HL_CONFIG_DIR` (local nix-cfg checkout).
 
 ## Deploying config changes

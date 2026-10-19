@@ -16,7 +16,7 @@ export interface HomelabConfig {
   /** Where homelab-tui is installed on the homelab. Unquoted for the same reason as nixConfigDir. */
   remoteBin: string;
   /** `owner/name` of the GitHub repo that publishes homelab-tui releases. */
-  repo?: string;
+  repo: string;
   /** `owner/name` of the GitHub repo holding the NixOS config that `hl deploy` applies. */
   configRepo: string;
   /** Local checkout of that config repo (on this machine); lets `hl deploy` check it was pushed first. */
@@ -54,7 +54,7 @@ export function loadConfig(env: Env = process.env): HomelabConfig {
     nixConfigDir: pathFrom(env, "HL_NIX_DIR", "~/nix-config"),
     flakeHost: env.HL_FLAKE_HOST ?? "wyse",
     remoteBin: pathFrom(env, "HL_REMOTE_BIN", `~/.local/bin/${BINARY_NAME}`),
-    repo: env.HL_REPO,
+    repo: env.HL_REPO ?? "Quackzoer/nix-homelab-tui-manager",
     configRepo: env.HL_CONFIG_REPO ?? "Quackzoer/nix-cfg",
     configDir: env.HL_CONFIG_DIR || undefined,
   };

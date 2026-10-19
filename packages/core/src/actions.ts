@@ -71,9 +71,11 @@ export function rebootCommand(): string {
   return `sudo systemd-run --quiet --on-active=3s --unit=hl-reboot systemctl reboot && echo "Rebooting in 3 seconds"`;
 }
 
+/** Shown when the homelab shell cannot find homelab-tui (exit code 127). */
+export const NOT_INSTALLED =
+  "homelab-tui is not installed on the homelab yet. Run `hl update` to install the latest release.";
+
 export function updateCommand(cfg: HomelabConfig): string {
-  if (!cfg.repo)
-    throw new Error("Set HL_REPO (owner/name) to the GitHub repo that publishes releases");
   const url = `https://github.com/${cfg.repo}/releases/latest/download/${LINUX_ASSET}`;
   const bin = cfg.remoteBin;
   return `mkdir -p "$(dirname ${bin})" && curl -fsSL ${shellQuote(url)} -o ${bin}.new && chmod +x ${bin}.new && mv -f ${bin}.new ${bin} && echo "Installed ${bin}"`;
@@ -88,6 +90,8 @@ export interface MenuItem {
   tty?: boolean;
   /** Runs sudo on the homelab, so it needs a terminal for the password prompt. */
   sudo?: boolean;
+  /** Plain-language explanations for specific exit codes. */
+  explain?: Record<number, string>;
   /** Ask for confirmation before running. */
   danger?: boolean;
 }
@@ -100,6 +104,7 @@ export function menuItems(cfg: HomelabConfig): MenuItem[] {
       description: "The full management TUI running on the homelab",
       command: cfg.remoteBin,
       tty: true,
+      explain: { 127: NOT_INSTALLED },
     },
     {
       id: "status",

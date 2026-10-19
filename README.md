@@ -45,4 +45,4 @@ scp dist/homelab-tui krzysztof@wyse:~/.local/bin/homelab-tui
 ```
 
 The NixOS config also needs `programs.nix-ld.enable = true;`, otherwise compiled Bun binaries cannot start.
-Once releases are published from CI, `HL_REPO=owner/name hl update` replaces the manual copy.
+Once releases are published from CI (every push to `main`), `hl update` replaces the manual copy.
