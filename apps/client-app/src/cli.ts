@@ -4,6 +4,9 @@ import {
   NOT_INSTALLED,
   type HomelabConfig,
   type Target,
+  agentStatus,
+  authenticate,
+  isAuthenticated,
   describeTarget,
   deployCommand,
   dockerLogsCommand,
@@ -58,9 +61,60 @@ async function confirm(question: string): Promise<boolean> {
   }
 }
 
-/** Checks the host answers (with a spinner), runs the call over ssh and reports how it went. Returns ssh's exit code. */
-async function execute(target: Target, call: RemoteCall, label: string): Promise<number> {
+/** Waits for Enter so the output of an action can be read. Returns false when the input is closed (Ctrl-D). */
+async function pause(): Promise<boolean> {
+  const rl = createInterface({ input: process.stdin, output: process.stderr });
+  try {
+    await rl.question("\nPress Enter to return to the menu (Ctrl-C to quit) ");
+    return true;
+  } catch {
+    return false;
+  } finally {
+    rl.close();
+  }
+}
+
+const loggedIn = new Set<string>();
+
+/**
+ * Logs in to the homelab once per run. ssh asks for the key passphrase (and the host-key question)
+ * here, up front; afterwards the shared connection or the ssh-agent key serves every action without
+ * asking again. The sudo password is a separate prompt on the homelab and is always asked.
+ */
+async function ensureLogin(target: Target): Promise<boolean> {
   const where = describeTarget(target);
+  if (loggedIn.has(where)) return true;
+  if (await isAuthenticated(target)) {
+    loggedIn.add(where);
+    return true;
+  }
+  note(`→ Logging in to ${where} (ssh may ask for your key passphrase, once)`);
+  const code = await authenticate(target);
+  if (code !== 0) {
+    note(
+      code === 255
+        ? "✖ ssh could not connect or authenticate (exit code 255)"
+        : `✖ Login failed with exit code ${code}`,
+    );
+    return false;
+  }
+  loggedIn.add(where);
+  note("✔ Logged in. Later actions will not ask for the ssh passphrase again");
+  if (process.platform === "win32" && (await agentStatus()) === "missing") {
+    note(
+      "  Tip: start the Windows 'OpenSSH Authentication Agent' service (Services app, or an admin PowerShell:\n" +
+        "  Set-Service ssh-agent -StartupType Manual; Start-Service ssh-agent), otherwise every action asks again.",
+    );
+  }
+  return true;
+}
+
+const connected = new Set<string>();
+
+/** Checks the host answers (with a spinner) and logs in. Done once per run; later actions reuse it. */
+async function connect(target: Target): Promise<boolean> {
+  const where = describeTarget(target);
+  if (connected.has(where)) return true;
   const spinner = startSpinner(`Reaching ${where}…`);
   const probe = await probeTarget(target);
   if (!probe.ok) {
@@ -68,20 +122,22 @@ async function execute(target: Target, call: RemoteCall, label: string): Promise
     note(
       "  Is the homelab on and reachable from here? Use -H <host> or set HL_HOST to point elsewhere.",
     );
-    return 255;
+    return false;
   }
   spinner.succeed(
     probe.skipped
       ? `Connecting to ${where}`
       : `${where} is reachable (${probe.host}:${probe.port})`,
   );
-  note(
-    `→ ${label} (${
-      call.sudo
-        ? "you may be asked for your ssh key passphrase, then for the sudo password on the homelab"
-        : "ssh may ask for your key passphrase"
-    })`,
-  );
+  if (!(await ensureLogin(target))) return false;
+  connected.add(where);
+  return true;
+}
+
+/** Runs the call over ssh and reports how it went. Returns ssh's exit code. */
+async function execute(target: Target, call: RemoteCall, label: string): Promise<number> {
+  if (!(await connect(target))) return 255;
+  note(`→ ${label}${call.sudo ? " (you will be asked for the sudo password on the homelab)" : ""}`);
 
   const code = await runRemote(target, call.command, { tty: call.tty });
   if (code !== 0) {
@@ -137,19 +193,32 @@ export async function run(argv: string[]): Promise<void> {
     const cfg = configFrom(cmd);
     const items = menuItems(cfg);
     const { pickMenuItem } = await import("./tui.tsx");
-    const id = await pickMenuItem({
-      title: "homelab",
-      subtitle: describeTarget(cfg.target),
-      items,
-    });
-    const item = items.find((i) => i.id === id);
-    if (!item) return;
-    if (item.danger && !(await confirm(`${item.label} on ${describeTarget(cfg.target)}?`))) return;
-    process.exitCode = await execute(
-      cfg.target,
-      { command: item.command, tty: item.tty, sudo: item.sudo, explain: item.explain },
-      item.label,
-    );
+    // Connect before the first menu, so the passphrase is asked once and the actions run straight away.
+    if (!(await connect(cfg.target))) {
+      process.exitCode = 255;
+      return;
+    }
+    // The menu comes back after every action; q / Esc leaves it.
+    for (;;) {
+      const id = await pickMenuItem({
+        title: "homelab",
+        subtitle: describeTarget(cfg.target),
+        items,
+      });
+      const item = items.find((i) => i.id === id);
+      if (!item) return;
+      if (item.danger && !(await confirm(`${item.label} on ${describeTarget(cfg.target)}?`))) {
+        continue;
+      }
+      const code = await execute(
+        cfg.target,
+        { command: item.command, tty: item.tty, sudo: item.sudo, explain: item.explain },
+        item.label,
+      );
+      // A clean exit from an interactive program (homelab-tui, a shell) has nothing left to read.
+      const interactive = item.tty === true && !item.sudo;
+      if (!(interactive && code === 0) && !(await pause())) return;
+    }
   });
 
   program

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vite-plus/test";
 import {
+  agentStatusFromExit,
   deployCommand,
   dockerRestartCommand,
   loadConfig,
@@ -50,8 +51,20 @@ describe("sshArgs", () => {
     expect(args).toContain("ControlMaster=auto");
     expect(args.slice(args.indexOf("-p"), args.indexOf("-p") + 2)).toEqual(["-p", "2222"]);
   });
+  test("keys are added to the agent after the first login", () => {
+    expect(sshArgs(target, {}, "win32")).toContain("AddKeysToAgent=yes");
+  });
   test("rejects option-like hosts", () => {
     expect(() => sshArgs({ host: "-oProxyCommand=evil" })).toThrow();
+  });
+});
+
+describe("agentStatusFromExit", () => {
+  test("maps ssh-add -l exit codes", () => {
+    expect(agentStatusFromExit(0)).toBe("ready");
+    expect(agentStatusFromExit(1)).toBe("empty");
+    expect(agentStatusFromExit(2)).toBe("missing");
+    expect(agentStatusFromExit(null)).toBe("missing");
   });
 });
 

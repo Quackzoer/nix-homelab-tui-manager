@@ -48,22 +48,30 @@ Applies to all three: `homelab-tui`, the `hl` menu (client app) and plain CLI ou
 
 ## 5b. Extensible service menu (`hl` and `homelab-tui`)
 
-Goal: adding a new service (Discord bot, Syncthing, GitHub runner, a Docker container, ...) means adding one entry, not writing new menu code.
+Design: [docs/menu-manifest.md](docs/menu-manifest.md). Goal: adding a service (Discord bot, Syncthing, GitHub runner, a container) means declaring it in `nix-cfg`, not changing or releasing the apps.
 
-- [ ] Define a service registry in `@homelab/core`: one entry per service with `id`, `label`, `description`, `kind` (systemd unit or Docker container) and an optional list of extra actions
-- [ ] Standard actions generated for every service: status, start, stop, restart, logs (follow), enable/disable at boot; per-service extras (e.g. "run backup now") are just additional entries
-- [ ] Two-level menu: the top level lists general items (deploy, rebuild, reboot, ...) plus every registered service; selecting a service opens a submenu with only that service's actions and a "Back" item
-- [ ] Show live state next to each service in the top-level list (running / stopped / failed) and in the submenu header
-- [ ] Same registry and menu component used by `hl` (over ssh) and `homelab-tui` (local), so a new service shows up in both
-- [ ] Matching CLI commands generated from the registry, e.g. `hl service <name> <action>`, with tab-completable names
-- [ ] Load the registry from a config file (see section 5) so adding a service needs no rebuild of the apps
-- [ ] Unit tests: registry validation (unique ids, safe names), action to command mapping, submenu contents per service kind
+- [ ] Manifest schema v1 + parser/validator in `@homelab/core` (`menu.ts`): JSON with a `"homelab": "menu/v1"` marker, `defineService()` helper and `MENU` symbol for services bundled in TypeScript
+- [ ] NixOS module in `nix-cfg` (`homelab.services.<id>`) that writes `/etc/homelab/menu.d/<id>.json`; migrate Syncthing and Docker as the first entries
+- [ ] Standard actions derived from `kind` (systemd/docker): status, start, stop, restart, logs (follow), enable/disable; manifests list only extra actions (argv arrays, `sudo`, `danger`)
+- [ ] `hl` loads all manifests plus live state in a single ssh call; `homelab-tui` reads them locally; one bad manifest shows an error but never hides the others
+- [ ] Two-level menu: general items + every service with live state; selecting a service opens a submenu with its actions and "Back"
+- [ ] CLI mirror: `hl service <id> <action>`, with tab-completable ids
+- [ ] Unit tests: validation (unique ids, safe names, unknown fields), action to command mapping, submenu contents per kind
+
+## 5c. Docs
+
+- [x] `docs/` directory with architecture, conventions and the menu manifest design
+- [ ] Keep `docs/` in sync with code changes (same commit); review it when finishing each TODO section
+- [x] Add a short "Project docs" pointer to `AGENTS.md` so coding assistants read `docs/` first
+- [ ] Add `docs/nix-cfg.md`: module layout, how to add a service, deploy flow, recovery (rollback, boot generations)
 
 ## 6. hl (client): usability
 
-- [ ] Return to the menu after an action finishes instead of exiting
+- [x] Return to the menu after an action finishes instead of exiting (Enter to continue, `q`/Esc leaves)
+- [x] Log in to ssh once up front; later actions reuse it without asking (sudo still asks every time)
 - [ ] Config file (`~/.config/homelab/config.json`) plus `hl init` wizard; env vars stay as overrides
-- [ ] Windows has no ssh connection reuse, so each command asks for the key passphrase again: detect a missing ssh-agent, print the `ssh-add` / "start the OpenSSH Authentication Agent service" hint, and consider running several steps in one ssh session
+- [x] Windows has no ssh connection reuse: keys are added to ssh-agent on first login (`AddKeysToAgent`), and `hl` prints a hint when the OpenSSH Authentication Agent service is not running
+- [ ] Optional: run several steps in one ssh session
 - [ ] Confirm before restarting services/containers (skip with `--yes`) and add `--dry-run` to print the ssh command without running it
 - [ ] `--json` output for `status` (scripting), shell completions
 - [ ] `hl update --self` to update `hl` itself, and warn when `hl` and `homelab-tui` versions differ

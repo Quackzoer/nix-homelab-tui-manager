@@ -21,6 +21,8 @@ vp run dev           # website
 
 See `apps/client-app/README.md` for the `hl` commands and `HL_*` settings.
 
+Design and contributor guides live in [`docs/`](docs/README.md).
+
 ## Running `hl`
 
 ```bash

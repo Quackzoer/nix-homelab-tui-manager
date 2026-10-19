@@ -9,6 +9,16 @@ bun run start -- status       # any command: status / logs / docker ps / rebuild
 bun run build                 # compile to dist/hl
 ```
 
+## Logging in
+
+`hl` logs in once, before the first action (or before the menu opens): ssh asks for your key passphrase
+there, and every later action runs without asking again. On Linux/macOS the connection is shared; on
+Windows the key is kept in ssh-agent, so the **OpenSSH Authentication Agent** service must be running
+(admin PowerShell: `Set-Service ssh-agent -StartupType Manual; Start-Service ssh-agent`). `hl` prints this hint when it is not.
+The sudo password on the homelab is a separate prompt and is always asked.
+
+In the interactive menu, an action returns to the menu when it finishes (press Enter); `q` or Esc leaves.
+
 Settings come from env vars (all optional): `HL_HOST` (wyse), `HL_USER` (krzysztof), `HL_PORT`,
 `HL_NIX_DIR` (~/nix-config), `HL_FLAKE_HOST` (wyse), `HL_REMOTE_BIN` (~/.local/bin/homelab-tui),
 `HL_REPO` (owner/name of the release repo, default Quackzoer/nix-homelab-tui-manager),
