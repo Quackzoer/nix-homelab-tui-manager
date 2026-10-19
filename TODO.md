@@ -28,7 +28,10 @@
 
 ## 4. Visual polish
 
+Applies to all three: `homelab-tui`, the `hl` menu (client app) and plain CLI output (spinners, colours, error and success messages, `--help` text).
+
 - [ ] Consistent theme (colours, borders, spacing) shared by `hl` menu and `homelab-tui`
+- [ ] CLI output polish: consistent colours/icons for success, warning and error lines, aligned tables for `hl status` and `hl docker ps`, tidy `--help` text, respect `NO_COLOR`
 - [ ] Dashboard home screen: uptime, load, memory/disk bars, container and failed-unit counts
 - [ ] Status colours (green/yellow/red), icons for services
 - [ ] Footer with key hints, header with host name and version
@@ -42,6 +45,19 @@
 - [ ] Log viewer: follow, scroll, filter, switch between units/containers
 - [ ] System panel: CPU, memory, temperature, eMMC (`/`) and SSD (`/data`) usage
 - [ ] `--version` and `--help`, a clear message when not run in a terminal, and always restore the terminal on crash
+
+## 5b. Extensible service menu (`hl` and `homelab-tui`)
+
+Goal: adding a new service (Discord bot, Syncthing, GitHub runner, a Docker container, ...) means adding one entry, not writing new menu code.
+
+- [ ] Define a service registry in `@homelab/core`: one entry per service with `id`, `label`, `description`, `kind` (systemd unit or Docker container) and an optional list of extra actions
+- [ ] Standard actions generated for every service: status, start, stop, restart, logs (follow), enable/disable at boot; per-service extras (e.g. "run backup now") are just additional entries
+- [ ] Two-level menu: the top level lists general items (deploy, rebuild, reboot, ...) plus every registered service; selecting a service opens a submenu with only that service's actions and a "Back" item
+- [ ] Show live state next to each service in the top-level list (running / stopped / failed) and in the submenu header
+- [ ] Same registry and menu component used by `hl` (over ssh) and `homelab-tui` (local), so a new service shows up in both
+- [ ] Matching CLI commands generated from the registry, e.g. `hl service <name> <action>`, with tab-completable names
+- [ ] Load the registry from a config file (see section 5) so adding a service needs no rebuild of the apps
+- [ ] Unit tests: registry validation (unique ids, safe names), action to command mapping, submenu contents per service kind
 
 ## 6. hl (client): usability
 
