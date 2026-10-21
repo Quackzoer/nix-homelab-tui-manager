@@ -126,6 +126,20 @@ Next:
 - [ ] Private config repo: needs a token on the homelab (`nix.settings.access-tokens`)
 - [ ] `hl deploy --dry-run` (`nixos-rebuild dry-activate`) before the real switch
 
+## 10. GitHub authentication (private repos)
+
+Goal: give the homelab a GitHub token from the client app, so the server can fetch private repos (the NixOS config for `hl deploy` / auto-upgrade, release downloads of a private `nix-homelab-tui-manager`).
+
+- [ ] `hl github login`: prompt for a personal access token (hidden input), validate it against the GitHub API (`GET /user`, check the scopes/expiry), then install it on the homelab
+- [ ] Send the token over the ssh **stdin**, never as a command-line argument (it would show up in `ps` and shell history)
+- [ ] Store it on the homelab in a root-only file (mode 0600), e.g. `/etc/nix/access-tokens`, loaded by `nix.conf` with `!include`, so `nixos-rebuild` and `system.autoUpgrade` (both run as root) can fetch `github:` flakes; never put the token in the Nix store or in `nix-cfg`
+- [ ] Use the same token for `homelab-tui-install` and `hl update` when the release repo is private (GitHub API with an `Authorization` header and `Accept: application/octet-stream`)
+- [ ] `hl github status` (is a token installed, does it still work, when does it expire) and `hl github logout` (remove it from the homelab)
+- [ ] Recommend a fine-grained token limited to the needed repos with read-only "Contents" access; print this in the login prompt and in the docs
+- [ ] Do not keep the token on the desktop (or use the OS keychain if it must be remembered); never log it, redact it in error output
+- [ ] Warn before expiry (check the `github-authentication-token-expiration` response header) and show it in `hl status`
+- [ ] Document in `docs/` (`docs/github-auth.md`): what is stored where, how to rotate, how to revoke, what `deploy` does without a token
+
 ## Release and deployment
 
 - [x] GitHub Actions workflow publishing `homelab-tui` and `hl` for Linux and Windows on every push to `main` (tag `v0.1.<run number>`; work on `dev` to avoid releases) (`.github/workflows/release.yml`)
