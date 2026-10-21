@@ -49,8 +49,14 @@ jobs:
         run: |
           bun run --cwd packages/core typecheck
           bun run --cwd packages/core test
+          bun run --cwd packages/opentui-accordion typecheck
           bun run --cwd apps/host-app typecheck
           bun run --cwd apps/client-app typecheck
+      - name: UI tests (OpenTUI needs its native core, Linux runner only)
+        if: runner.os == 'Linux'
+        run: |
+          bun run --cwd packages/opentui-accordion test
+          bun run --cwd apps/client-app test
       - name: Build apps
         run: |
           bun run --cwd apps/host-app build

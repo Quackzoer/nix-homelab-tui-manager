@@ -28,7 +28,10 @@
 
 ## 4. Visual polish
 
+Applies to all three: `homelab-tui`, the `hl` menu (client app) and plain CLI output (spinners, colours, error and success messages, `--help` text).
+
 - [ ] Consistent theme (colours, borders, spacing) shared by `hl` menu and `homelab-tui`
+- [ ] CLI output polish: consistent colours/icons for success, warning and error lines, aligned tables for `hl status` and `hl docker ps`, tidy `--help` text, respect `NO_COLOR`
 - [ ] Dashboard home screen: uptime, load, memory/disk bars, container and failed-unit counts
 - [ ] Status colours (green/yellow/red), icons for services
 - [ ] Footer with key hints, header with host name and version
@@ -43,11 +46,52 @@
 - [ ] System panel: CPU, memory, temperature, eMMC (`/`) and SSD (`/data`) usage
 - [ ] `--version` and `--help`, a clear message when not run in a terminal, and always restore the terminal on crash
 
+## 5b. Extensible service menu (`hl` and `homelab-tui`)
+
+Design: [docs/menu-manifest.md](docs/menu-manifest.md). Goal: adding a service (Discord bot, Syncthing, GitHub runner, a container) means adding one folder, not changing menu code.
+
+Done:
+
+- [x] `@homelab/opentui-accordion`: `AccordionRenderable` with programmatic control (`accordion.set(1).open()`), events, keyboard, React binding, tests (kept free of homelab code so it can be proposed to OpenTUI)
+- [x] Two-tab, two-column menu in `hl` (General / Services): tabs on top, accordion of entries on the left, actions on the right; menu returns to the same place after an action
+- [x] `menuTabs()` in `@homelab/core` builds the tabs; services get the standard actions (status, logs, follow logs, restart)
+
+Next:
+
+- [ ] Builder API: `defineService({...}).action(...)` in `@homelab/core` producing a validated service definition (standard actions from `kind`, extras with argv commands, `sudo`, `danger`)
+- [ ] `features/services/<name>/` folders, each with a default export built by the builder, collected by one generated index so adding a folder adds the menu entry (see the design doc for the two options: bundled in the apps vs. JSON manifests written by NixOS)
+- [ ] Live state (running / stopped / failed) next to each service, fetched with one ssh call
+- [ ] `hl service <id> <action>` CLI mirror generated from the same definitions
+- [ ] Decide whether `nix-cfg` moves into this monorepo so a service's menu definition and its NixOS module live in one folder (see design doc)
+- [ ] Unit tests: validation (unique ids, safe names), action to command mapping, menu contents per service
+
+## 5d. First-run bootstrap from `homelab-tui` (one click)
+
+- [ ] On a fresh server, `homelab-tui` (installed by the NixOS config) shows an "Initialise" screen: download/clone the config and repo, run the first `nixos-rebuild`, install what is missing, report each step with progress
+- [ ] Idempotent steps with a visible checklist (done / skipped / failed) and a "retry failed step" action
+- [ ] Documented in `docs/bootstrap.md`: what runs, what needs a password, how to recover
+
+## 5e. Use OpenTUI for the dialogs around the menu
+
+- [ ] Confirmation dialog (bordered, in the same theme) instead of the plain `[y/N]` readline prompt
+- [ ] Result panel after an action (bordered: label, success/failure, plain-language explanation, "Enter: back to menu") instead of the plain "Press Enter" line
+- [ ] Login/connection progress as a bordered panel (reaching host, logging in, agent tip)
+- [ ] Streamed command output stays in the normal terminal; only the parts before and after it are OpenTUI screens
+
+## 5c. Docs
+
+- [x] `docs/` directory with architecture, conventions and the menu manifest design
+- [ ] Keep `docs/` in sync with code changes (same commit); review it when finishing each TODO section
+- [x] Add a short "Project docs" pointer to `AGENTS.md` so coding assistants read `docs/` first
+- [ ] Add `docs/nix-cfg.md`: module layout, how to add a service, deploy flow, recovery (rollback, boot generations)
+
 ## 6. hl (client): usability
 
-- [ ] Return to the menu after an action finishes instead of exiting
+- [x] Return to the menu after an action finishes instead of exiting (Enter to continue, `q`/Esc leaves)
+- [x] Log in to ssh once up front; later actions reuse it without asking (sudo still asks every time)
 - [ ] Config file (`~/.config/homelab/config.json`) plus `hl init` wizard; env vars stay as overrides
-- [ ] Windows has no ssh connection reuse, so each command asks for the key passphrase again: detect a missing ssh-agent, print the `ssh-add` / "start the OpenSSH Authentication Agent service" hint, and consider running several steps in one ssh session
+- [x] Windows has no ssh connection reuse: keys are added to ssh-agent on first login (`AddKeysToAgent`), and `hl` prints a hint when the OpenSSH Authentication Agent service is not running
+- [ ] Optional: run several steps in one ssh session
 - [ ] Confirm before restarting services/containers (skip with `--yes`) and add `--dry-run` to print the ssh command without running it
 - [ ] `--json` output for `status` (scripting), shell completions
 - [ ] `hl update --self` to update `hl` itself, and warn when `hl` and `homelab-tui` versions differ
@@ -81,6 +125,20 @@
 - [ ] Optional `--branch` to deploy a test branch, and `hl rollback` to switch back to the previous generation
 - [ ] Private config repo: needs a token on the homelab (`nix.settings.access-tokens`)
 - [ ] `hl deploy --dry-run` (`nixos-rebuild dry-activate`) before the real switch
+
+## 10. GitHub authentication (private repos)
+
+Goal: give the homelab a GitHub token from the client app, so the server can fetch private repos (the NixOS config for `hl deploy` / auto-upgrade, release downloads of a private `nix-homelab-tui-manager`).
+
+- [ ] `hl github login`: prompt for a personal access token (hidden input), validate it against the GitHub API (`GET /user`, check the scopes/expiry), then install it on the homelab
+- [ ] Send the token over the ssh **stdin**, never as a command-line argument (it would show up in `ps` and shell history)
+- [ ] Store it on the homelab in a root-only file (mode 0600), e.g. `/etc/nix/access-tokens`, loaded by `nix.conf` with `!include`, so `nixos-rebuild` and `system.autoUpgrade` (both run as root) can fetch `github:` flakes; never put the token in the Nix store or in `nix-cfg`
+- [ ] Use the same token for `homelab-tui-install` and `hl update` when the release repo is private (GitHub API with an `Authorization` header and `Accept: application/octet-stream`)
+- [ ] `hl github status` (is a token installed, does it still work, when does it expire) and `hl github logout` (remove it from the homelab)
+- [ ] Recommend a fine-grained token limited to the needed repos with read-only "Contents" access; print this in the login prompt and in the docs
+- [ ] Do not keep the token on the desktop (or use the OS keychain if it must be remembered); never log it, redact it in error output
+- [ ] Warn before expiry (check the `github-authentication-token-expiration` response header) and show it in `hl status`
+- [ ] Document in `docs/` (`docs/github-auth.md`): what is stored where, how to rotate, how to revoke, what `deploy` does without a token
 
 ## Release and deployment
 

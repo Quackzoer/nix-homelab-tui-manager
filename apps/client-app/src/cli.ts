@@ -4,6 +4,10 @@ import {
   NOT_INSTALLED,
   type HomelabConfig,
   type Target,
+  addKeysToAgent,
+  agentStatus,
+  authenticate,
+  isAuthenticated,
   describeTarget,
   deployCommand,
   dockerLogsCommand,
@@ -11,7 +15,7 @@ import {
   dockerRestartCommand,
   loadConfig,
   logsCommand,
-  menuItems,
+  menuTabs,
   rebootCommand,
   rebuildCommand,
   restartServiceCommand,
@@ -21,6 +25,7 @@ import {
   updateCommand,
 } from "@homelab/core";
 import pkg from "../package.json" with { type: "json" };
+import { agentServiceState, enableAgentService } from "./agent.ts";
 import { pushState } from "./git.ts";
 import { note, startSpinner } from "./ui.ts";
 
@@ -58,9 +63,63 @@ async function confirm(question: string): Promise<boolean> {
   }
 }
 
-/** Checks the host answers (with a spinner), runs the call over ssh and reports how it went. Returns ssh's exit code. */
-async function execute(target: Target, call: RemoteCall, label: string): Promise<number> {
+/** Waits for Enter so the output of an action can be read. Returns false when the input is closed (Ctrl-D). */
+async function pause(): Promise<boolean> {
+  const rl = createInterface({ input: process.stdin, output: process.stderr });
+  try {
+    await rl.question("\nPress Enter to return to the menu (Ctrl-C to quit) ");
+    return true;
+  } catch {
+    return false;
+  } finally {
+    rl.close();
+  }
+}
+
+const loggedIn = new Set<string>();
+
+/**
+ * Logs in to the homelab once per run. ssh asks for the key passphrase (and the host-key question)
+ * here, up front; afterwards the shared connection or the ssh-agent key serves every action without
+ * asking again. The sudo password is a separate prompt on the homelab and is always asked.
+ */
+async function ensureLogin(target: Target): Promise<boolean> {
   const where = describeTarget(target);
+  if (loggedIn.has(where)) return true;
+  if (await isAuthenticated(target)) {
+    loggedIn.add(where);
+    return true;
+  }
+  note(`→ Logging in to ${where} (ssh may ask for your key passphrase, once)`);
+  const code = await authenticate(target);
+  if (code !== 0) {
+    note(
+      code === 255
+        ? "✖ ssh could not connect or authenticate (exit code 255)"
+        : `✖ Login failed with exit code ${code}`,
+    );
+    return false;
+  }
+  loggedIn.add(where);
+  // Linux/macOS keep the connection open; elsewhere ssh-agent must hold the key or it asks again.
+  const remembered = process.platform !== "win32" || (await agentStatus()) === "ready";
+  if (remembered) {
+    note("✔ Logged in. Later actions will not ask for the ssh passphrase again");
+  } else {
+    note("✔ Logged in");
+    note(
+      "  Tip: run `hl init` once so ssh remembers your key and stops asking for the passphrase.",
+    );
+  }
+  return true;
+}
+
+const connected = new Set<string>();
+
+/** Checks the host answers (with a spinner) and logs in. Done once per run; later actions reuse it. */
+async function connect(target: Target): Promise<boolean> {
+  const where = describeTarget(target);
+  if (connected.has(where)) return true;
   const spinner = startSpinner(`Reaching ${where}…`);
   const probe = await probeTarget(target);
   if (!probe.ok) {
@@ -68,20 +127,22 @@ async function execute(target: Target, call: RemoteCall, label: string): Promise
     note(
       "  Is the homelab on and reachable from here? Use -H <host> or set HL_HOST to point elsewhere.",
     );
-    return 255;
+    return false;
   }
   spinner.succeed(
     probe.skipped
       ? `Connecting to ${where}`
       : `${where} is reachable (${probe.host}:${probe.port})`,
   );
-  note(
-    `→ ${label} (${
-      call.sudo
-        ? "you may be asked for your ssh key passphrase, then for the sudo password on the homelab"
-        : "ssh may ask for your key passphrase"
-    })`,
-  );
+  if (!(await ensureLogin(target))) return false;
+  connected.add(where);
+  return true;
+}
+
+/** Runs the call over ssh and reports how it went. Returns ssh's exit code. */
+async function execute(target: Target, call: RemoteCall, label: string): Promise<number> {
+  if (!(await connect(target))) return 255;
+  note(`→ ${label}${call.sudo ? " (you will be asked for the sudo password on the homelab)" : ""}`);
 
   const code = await runRemote(target, call.command, { tty: call.tty });
   if (code !== 0) {
@@ -119,6 +180,76 @@ function positiveInt(value: string): number {
   return n;
 }
 
+/** Loads the host's ssh key into ssh-agent (passphrase asked once). Returns an exit code. */
+async function loadKeys(cfg: HomelabConfig): Promise<number> {
+  const where = describeTarget(cfg.target);
+  if ((await agentStatus()) === "missing") {
+    note("✖ ssh-agent is not running, so ssh cannot remember your key.");
+    note(
+      process.platform === "win32"
+        ? "  Run `hl init` to start it."
+        : '  Start one with: eval "$(ssh-agent -s)" (or enable your desktop\'s ssh agent), then run `hl login` again.',
+    );
+    return 1;
+  }
+  note("→ Loading your ssh key into ssh-agent (enter the passphrase when asked)");
+  const { added, code } = await addKeysToAgent(cfg.target);
+  if (added.length === 0) {
+    note(
+      `✖ No key files found for ${where}. Create one with ssh-keygen and install it on the homelab first.`,
+    );
+    return 1;
+  }
+  if (code !== 0) {
+    note(`✖ ssh-add failed (exit code ${code})`);
+    return code;
+  }
+  connected.delete(where);
+  if (await isAuthenticated(cfg.target)) {
+    note(`✔ Done: ssh will not ask for the passphrase again. Keys: ${added.join(", ")}`);
+    return 0;
+  }
+  note(
+    `! Key loaded, but ${where} still did not accept it without a prompt. Is the key installed on the homelab (authorized_keys)?`,
+  );
+  return 1;
+}
+
+/** The interactive menu. Actions return to it; q / Esc leaves. */
+async function menuLoop(cfg: HomelabConfig): Promise<void> {
+  const tabs = menuTabs(cfg);
+  const { pickMenuItem } = await import("./tui.tsx");
+  // Connect before the first menu, so the passphrase is asked once and the actions run straight away.
+  if (!(await connect(cfg.target))) {
+    process.exitCode = 255;
+    return;
+  }
+  // The menu comes back after every action, on the same tab and entry; q quits.
+  let state: { tab: number; group: number } | undefined;
+  for (;;) {
+    const picked = await pickMenuItem({
+      title: "homelab",
+      subtitle: describeTarget(cfg.target),
+      tabs,
+      initial: state,
+    });
+    state = picked.state;
+    const item = picked.item;
+    if (!item) return;
+    if (item.danger && !(await confirm(`${item.label} on ${describeTarget(cfg.target)}?`))) {
+      continue;
+    }
+    const code = await execute(
+      cfg.target,
+      { command: item.command, tty: item.tty, sudo: item.sudo, explain: item.explain },
+      item.label,
+    );
+    // A clean exit from an interactive program (homelab-tui, a shell) has nothing left to read.
+    const interactive = item.tty === true && !item.sudo;
+    if (!(interactive && code === 0) && !(await pause())) return;
+  }
+}
+
 export async function run(argv: string[]): Promise<void> {
   const program = new Command()
     .name("hl")
@@ -134,30 +265,69 @@ export async function run(argv: string[]): Promise<void> {
       program.outputHelp();
       return;
     }
-    const cfg = configFrom(cmd);
-    const items = menuItems(cfg);
-    const { pickMenuItem } = await import("./tui.tsx");
-    const id = await pickMenuItem({
-      title: "homelab",
-      subtitle: describeTarget(cfg.target),
-      items,
-    });
-    const item = items.find((i) => i.id === id);
-    if (!item) return;
-    if (item.danger && !(await confirm(`${item.label} on ${describeTarget(cfg.target)}?`))) return;
-    process.exitCode = await execute(
-      cfg.target,
-      { command: item.command, tty: item.tty, sudo: item.sudo, explain: item.explain },
-      item.label,
-    );
+    await menuLoop(configFrom(cmd));
   });
+
+  program
+    .command("init")
+    .description(
+      "One-time setup: start ssh-agent (asks for administrator rights on Windows) and load your key",
+    )
+    .action(async (_o, cmd: Command) => {
+      const cfg = configFrom(cmd);
+      if (process.platform === "win32") {
+        const state = await agentServiceState();
+        if (state === "missing") {
+          note(
+            "✖ The OpenSSH Authentication Agent service was not found. Install the optional Windows feature 'OpenSSH Client' first (Settings → System → Optional features).",
+          );
+          process.exitCode = 1;
+          return;
+        }
+        if (state === "ok") {
+          note("✔ ssh-agent service is running and starts automatically");
+        } else {
+          note(
+            "→ Starting the ssh-agent service. Windows will ask for administrator rights (UAC): accept it",
+          );
+          if (!(await enableAgentService())) {
+            note(
+              "✖ The service did not start (was the prompt declined?). Run `hl init` again, or in an admin PowerShell:\n" +
+                "    Set-Service ssh-agent -StartupType Automatic; Start-Service ssh-agent",
+            );
+            process.exitCode = 1;
+            return;
+          }
+          note("✔ ssh-agent service is running and starts automatically");
+        }
+      }
+      process.exitCode = await loadKeys(cfg);
+    });
+
+  program
+    .command("login")
+    .description("Load your ssh key into ssh-agent so ssh asks for the passphrase only once")
+    .action(async (_o, cmd: Command) => {
+      process.exitCode = await loadKeys(configFrom(cmd));
+    });
 
   program
     .command("tui")
     .description("Open homelab-tui on the homelab, rendered in this terminal")
-    .action((_o, cmd: Command) =>
-      go(cmd, (cfg) => ({ command: cfg.remoteBin, tty: true, explain: { 127: NOT_INSTALLED } })),
-    );
+    .action(async (_o, cmd: Command) => {
+      const cfg = configFrom(cmd);
+      const code = await execute(
+        cfg.target,
+        { command: cfg.remoteBin, tty: true, explain: { 127: NOT_INSTALLED } },
+        "Running hl tui",
+      );
+      process.exitCode = code;
+      // Closing homelab-tui lands in the hl menu (when there is a terminal to show it in).
+      if (!process.stdin.isTTY || !process.stdout.isTTY) return;
+      if (code !== 0 && !(await pause())) return;
+      process.exitCode = 0;
+      await menuLoop(cfg);
+    });
 
   program
     .command("ssh")

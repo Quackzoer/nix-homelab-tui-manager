@@ -1,0 +1,29 @@
+{
+  "name": "@homelab/opentui-accordion",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Accordion renderable for OpenTUI (kept dependency-free of the homelab code so it can be proposed upstream).",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./react": "./src/react.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@opentui/core": "catalog:",
+    "@opentui/react": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "react": "catalog:",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "@opentui/core": "catalog:",
+    "@opentui/react": "catalog:",
+    "react": "catalog:"
+  }
+}

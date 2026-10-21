@@ -42,6 +42,11 @@ export function restartServiceCommand(service: string): string {
   return `sudo systemctl restart ${shellQuote(assertName("service", service))} && systemctl status --no-pager --lines 5 ${shellQuote(service)}`;
 }
 
+/** `systemctl status` for a unit; always exits 0 so an inactive service is not reported as a failed command. */
+export function serviceStatusCommand(unit: string): string {
+  return `systemctl status --no-pager --lines 15 ${shellQuote(assertName("unit", unit))} || true`;
+}
+
 export function logsCommand(
   unit: string,
   options: { follow?: boolean; lines?: number } = {},

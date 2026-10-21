@@ -25,3 +25,7 @@ release. Add a tool name to select part of the graph. For example, run
 - [ ] If setup, runtime, or package-manager behavior looks wrong, run `vp env doctor` and include its output when asking for help.
 
 <!--VITE PLUS END-->
+
+# Project docs
+
+Read `docs/README.md` first: it indexes the architecture, conventions and design docs for this repo. Update the matching doc in the same commit as the code change.

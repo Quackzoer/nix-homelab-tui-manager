@@ -1,11 +1,15 @@
 import { describe, expect, test } from "vite-plus/test";
 import {
+  agentStatusFromExit,
   deployCommand,
   dockerRestartCommand,
   loadConfig,
+  parseIdentityFiles,
   logsCommand,
   menuItems,
+  menuTabs,
   rebuildCommand,
+  serviceItems,
   shellQuote,
   sshArgs,
   updateCommand,
@@ -50,8 +54,31 @@ describe("sshArgs", () => {
     expect(args).toContain("ControlMaster=auto");
     expect(args.slice(args.indexOf("-p"), args.indexOf("-p") + 2)).toEqual(["-p", "2222"]);
   });
+  test("keys are added to the agent after the first login", () => {
+    expect(sshArgs(target, {}, "win32")).toContain("AddKeysToAgent=yes");
+  });
   test("rejects option-like hosts", () => {
     expect(() => sshArgs({ host: "-oProxyCommand=evil" })).toThrow();
+  });
+});
+
+describe("agentStatusFromExit", () => {
+  test("maps ssh-add -l exit codes", () => {
+    expect(agentStatusFromExit(0)).toBe("ready");
+    expect(agentStatusFromExit(1)).toBe("empty");
+    expect(agentStatusFromExit(2)).toBe("missing");
+    expect(agentStatusFromExit(null)).toBe("missing");
+  });
+});
+
+describe("parseIdentityFiles", () => {
+  test("expands ~ and drops duplicates", () => {
+    const out =
+      "hostname wyse\nidentityfile ~/.ssh/id_ed25519\nidentityfile ~/.ssh/id_rsa\nidentityfile ~/.ssh/id_ed25519\n";
+    expect(parseIdentityFiles(out, "/home/me")).toEqual([
+      "/home/me/.ssh/id_ed25519",
+      "/home/me/.ssh/id_rsa",
+    ]);
   });
 });
 
@@ -92,5 +119,26 @@ describe("commands", () => {
   });
   test("menu has a shell entry without a command", () => {
     expect(menuItems(cfg).find((i) => i.id === "shell")?.command).toBeUndefined();
+  });
+});
+
+describe("menuTabs", () => {
+  const cfg = loadConfig({});
+  test("General and Services tabs; every action of menuItems is reachable", () => {
+    const tabs = menuTabs(cfg);
+    expect(tabs.map((t) => t.id)).toEqual(["general", "services"]);
+    const general = tabs[0]!.groups.flatMap((g) => g.items.map((i) => i.id)).sort();
+    expect(general).toEqual(
+      menuItems(cfg)
+        .map((i) => i.id)
+        .sort(),
+    );
+  });
+  test("services get standard actions; restart needs sudo and a terminal", () => {
+    const items = serviceItems({ id: "x", label: "X", unit: "x.service" });
+    expect(items.map((i) => i.id)).toEqual(["x:status", "x:logs", "x:follow", "x:restart"]);
+    const restart = items.at(-1)!;
+    expect(restart.sudo && restart.tty && restart.danger).toBe(true);
+    expect(() => serviceItems({ id: "x", label: "X", unit: "x; reboot" })).toThrow();
   });
 });

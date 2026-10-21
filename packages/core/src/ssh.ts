@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { connect } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -32,7 +33,16 @@ export function sshArgs(
   if (target.user !== undefined && !HOST_LIKE.test(target.user)) {
     throw new Error(`Invalid user: ${JSON.stringify(target.user)}`);
   }
-  const args = ["-o", "ServerAliveInterval=30", "-o", "ConnectTimeout=10"];
+  // AddKeysToAgent: after the first successful login the key stays in ssh-agent, so later calls
+  // (also on Windows, which has no connection sharing) do not ask for the passphrase again.
+  const args = [
+    "-o",
+    "ServerAliveInterval=30",
+    "-o",
+    "ConnectTimeout=10",
+    "-o",
+    "AddKeysToAgent=yes",
+  ];
   if (options.tty) args.push("-t");
   if (target.port !== undefined) args.push("-p", String(target.port));
   // Windows OpenSSH has no ControlMaster support; elsewhere reuse one connection between calls.
@@ -71,6 +81,75 @@ export function runRemote(
     });
     child.on("close", (code, signal) => resolve(code ?? (signal ? 128 : 1)));
   });
+}
+
+export type AgentStatus = "ready" | "empty" | "missing";
+
+/** Maps the exit code of `ssh-add -l` to what it means: keys loaded, agent running but empty, or no agent. */
+export function agentStatusFromExit(code: number | null): AgentStatus {
+  if (code === 0) return "ready";
+  if (code === 1) return "empty";
+  return "missing";
+}
+
+/** Asks `ssh-add -l` whether an ssh-agent is running and holds keys. */
+export function agentStatus(): Promise<AgentStatus> {
+  return new Promise((resolve) => {
+    const child = spawn("ssh-add", ["-l"], { stdio: "ignore" });
+    child.on("error", () => resolve("missing"));
+    child.on("close", (code) => resolve(agentStatusFromExit(code)));
+  });
+}
+
+function runSilently(args: string[]): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const child = spawn("ssh", args, { stdio: "ignore" });
+    child.on("error", (error: NodeJS.ErrnoException) => {
+      reject(error.code === "ENOENT" ? new Error("`ssh` was not found on PATH") : error);
+    });
+    child.on("close", (code) => resolve(code ?? 1));
+  });
+}
+
+/**
+ * True when ssh can log in right now without asking anything (shared connection, agent key or a
+ * key without passphrase). Uses BatchMode, so it never prompts and never hangs on a question.
+ */
+export function isAuthenticated(target: Target): Promise<boolean> {
+  return runSilently(["-o", "BatchMode=yes", ...sshArgs(target), "true"]).then(
+    (code) => code === 0,
+  );
+}
+
+/**
+ * Logs in once with the terminal attached, so passphrase and host-key questions are answered here.
+ * Afterwards the connection (macOS/Linux) or the key in ssh-agent (all platforms) is reused, so
+ * later calls run without asking again. Resolves with ssh's exit code.
+ */
+export function authenticate(target: Target): Promise<number> {
+  return runRemote(target, "true");
+}
+
+/** Reads the key files ssh would try for a host out of `ssh -G` output (`~` expanded). */
+export function parseIdentityFiles(config: string, home: string = homedir()): string[] {
+  const files = [...config.matchAll(/^identityfile (.+)$/gm)].map((m) =>
+    m[1]!.trim().replace(/^~(?=[\\/]|$)/, home),
+  );
+  return [...new Set(files)];
+}
+
+/** Loads the host's key files that exist into ssh-agent. `ssh-add` asks for each passphrase once. */
+export async function addKeysToAgent(target: Target): Promise<{ added: string[]; code: number }> {
+  const files = parseIdentityFiles(await sshConfigFor(target)).filter((file) => existsSync(file));
+  if (files.length === 0) return { added: [], code: 1 };
+  const code = await new Promise<number>((resolve, reject) => {
+    const child = spawn("ssh-add", files, { stdio: "inherit" });
+    child.on("error", (error: NodeJS.ErrnoException) =>
+      reject(error.code === "ENOENT" ? new Error("`ssh-add` was not found on PATH") : error),
+    );
+    child.on("close", (exit) => resolve(exit ?? 1));
+  });
+  return { added: files, code };
 }
 
 export interface ProbeResult {
